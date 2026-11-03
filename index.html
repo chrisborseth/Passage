@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#050505"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>PASSAGE — Release</title>
+<style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#050505;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}body{overflow:hidden}.app{height:100dvh;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 20px) 25px calc(env(safe-area-inset-bottom) + 20px)}header{display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:3px;color:#aaa}header span:last-child{color:#666}main{flex:1;min-height:0;position:relative}canvas{width:100%;height:100%;display:block}footer{display:flex;flex-direction:column;align-items:center;gap:16px;min-height:122px}.time{font-size:12px;letter-spacing:2px;color:#aaa;font-variant-numeric:tabular-nums}.actions{display:flex;align-items:center;gap:15px}button{background:transparent;color:white;border:1px solid #666;border-radius:50%;width:65px;height:65px;font-size:10px;letter-spacing:1.2px;cursor:pointer}button.primary{background:#f2f2f2;color:#090909;border-color:#f2f2f2}button:disabled{opacity:.25}select{background:#050505;color:#aaa;border:0;font-size:11px;letter-spacing:1px;text-align:center}#status{color:#777;font-size:10px;letter-spacing:2px;text-transform:uppercase}button:focus-visible,select:focus-visible{outline:2px solid white;outline-offset:4px}</style></head>
+<body><div class="app"><header><span>PASSAGE</span><span>RELEASE / 01</span></header><main><canvas id="scene" aria-label="Dandelion slowly releasing its seeds as time passes"></canvas></main><footer><div id="status">READY</div><div class="time" id="time">25:00</div><div class="actions"><button id="reset" aria-label="Reset timer">RESET</button><button id="toggle" class="primary">START</button><select id="duration" aria-label="Timer duration"><option value="5">5 MIN</option><option value="15">15 MIN</option><option value="25" selected>25 MIN</option><option value="45">45 MIN</option><option value="60">60 MIN</option></select></div></footer></div>
+<script>
+(()=>{'use strict';
+const canvas=document.getElementById('scene'),ctx=canvas.getContext('2d'),timeEl=document.getElementById('time'),statusEl=document.getElementById('status'),toggle=document.getElementById('toggle'),reset=document.getElementById('reset'),select=document.getElementById('duration');
+let duration=1500000,elapsed=0,startedAt=0,running=false,completed=false,W=0,H=0,dpr=1;
+const fract=x=>x-Math.floor(x),rand=n=>fract(Math.sin(n*127.1+78.233)*43758.5453);
+const seeds=Array.from({length:150},(_,i)=>{const a=i*2.39996323,r=Math.sqrt((i+.5)/150),x=Math.cos(a)*r,y=Math.sin(a)*r;return {x,y,a,r,release:.025+.95*rand(i*7+3),speed:.65+rand(i+200)*.8,phase:rand(i+400)*6.28}});
+seeds.sort((a,b)=>a.release-b.release);seeds[seeds.length-1].release=.997;
+function resize(){const rect=canvas.getBoundingClientRect();W=rect.width;H=rect.height;dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0)}
+new ResizeObserver(resize).observe(canvas);resize();
+function progress(){return Math.min(1,(elapsed+(running?performance.now()-startedAt:0))/duration)}
+function format(ms){const s=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function updateUI(){const p=progress();timeEl.textContent=format(duration*(1-p));statusEl.textContent=completed?'COMPLETE':running?'RELEASING':elapsed?'PAUSED':'READY';toggle.textContent=completed?'AGAIN':running?'PAUSE':elapsed?'RESUME':'START';select.disabled=running||elapsed>0}
+function finish(){elapsed=duration;running=false;completed=true;if(navigator.vibrate)navigator.vibrate(35);updateUI()}
+toggle.onclick=()=>{if(completed){elapsed=0;completed=false}if(running){elapsed=Math.min(duration,elapsed+performance.now()-startedAt);running=false}else{startedAt=performance.now();running=true}updateUI()};
+reset.onclick=()=>{elapsed=0;running=false;completed=false;updateUI()};
+select.onchange=()=>{duration=Number(select.value)*60000;elapsed=0;completed=false;running=false;updateUI()};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateUI()});
+function draw(t){const p=progress();if(running&&p>=1)finish();ctx.clearRect(0,0,W,H);const scale=Math.min(W/350,H/540),cx=W*.5,headY=H*.34,stemBottom=H*.87,R=81*scale,stemX=Math.sin(t*.00031)*1.6*scale;
+ctx.lineCap='round';ctx.strokeStyle='rgba(255,255,255,.63)';ctx.lineWidth=Math.max(.65,.95*scale);ctx.beginPath();ctx.moveTo(cx,stemBottom);ctx.bezierCurveTo(cx-8*scale,H*.67,cx+6*scale,H*.48,cx+stemX,headY);ctx.stroke();
+ctx.strokeStyle='rgba(255,255,255,.36)';ctx.lineWidth=.65;ctx.beginPath();ctx.moveTo(cx-2*scale,H*.73);ctx.quadraticCurveTo(cx-27*scale,H*.69,cx-36*scale,H*.64);ctx.quadraticCurveTo(cx-10*scale,H*.65,cx-2*scale,H*.73);ctx.stroke();
+const sway=Math.sin(t*.00027)*1.1*scale;
+for(const s of seeds){const sx=cx+stemX+s.x*R,sy=headY+s.y*R,detached=p>=s.release;
+if(!detached){ctx.strokeStyle='rgba(255,255,255,.27)';ctx.lineWidth=.45;ctx.beginPath();ctx.moveTo(cx+stemX,headY);ctx.lineTo(sx+sway,sy);ctx.stroke();drawSeed(sx+sway,sy,s.a,s.r,scale,.72)}
+else{const age=(p-s.release)*duration/1000;const fade=Math.max(0,1-age/22);if(fade<=0)continue;const dx=age*5.5*s.speed*scale,dy=-age*2.3*scale+Math.sin(age*.7+s.phase)*7*scale;drawSeed(sx+dx,sy+dy,s.a+age*.2,s.r,scale,fade*.85)}
+}
+ctx.fillStyle='rgba(255,255,255,.72)';ctx.beginPath();ctx.arc(cx+stemX,headY,3.4*scale,0,Math.PI*2);ctx.fill();
+requestAnimationFrame(draw)}
+function drawSeed(x,y,a,r,scale,alpha){ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.globalAlpha=alpha;ctx.strokeStyle='white';ctx.fillStyle='white';ctx.lineWidth=.5;const len=(4+3*r)*scale;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(len,0);for(let j=-2;j<=2;j++){ctx.moveTo(len*.52,0);ctx.lineTo(len, j*1.5*scale)}ctx.stroke();ctx.beginPath();ctx.arc(len,0,.65*scale,0,Math.PI*2);ctx.fill();ctx.restore()}
+updateUI();requestAnimationFrame(draw);
+})();
+</script></body></html>
